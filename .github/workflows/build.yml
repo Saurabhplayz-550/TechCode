@@ -1,0 +1,50 @@
+name: Build APK from zip
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip extract karo
+        run: |
+          ZIP=$(ls *.zip 2>/dev/null | head -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "Repo ke root mein koi .zip file nahi mili"
+            exit 1
+          fi
+          echo "Extracting: $ZIP"
+          mkdir -p extracted
+          unzip -q -o "$ZIP" -d extracted
+          SETTINGS=$(find extracted -name "settings.gradle.kts" | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "Zip ke andar settings.gradle.kts nahi mili"
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Project root: $PROJECT_DIR"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Debug APK build karo
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: APK upload karo
+        uses: actions/upload-artifact@v4
+        with:
+          name: TechCode-debug-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
